@@ -1,0 +1,271 @@
+// backend/server.js - Complete Integrated Server
+const express = require('express');
+const https = require('https');
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const cors = require('cors');
+const dotenv = require('dotenv');
+
+// Load environment variables
+dotenv.config();
+
+// Import managers
+const { initializeCertificates } = require('./services/certificateInitializer');
+const PluginManager = require('./core/PluginManager');
+const { Pool } = require('pg');
+const redis = require('redis');
+
+// Initialize Express
+const app = express();
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cors());
+
+// Logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});
+
+// ============================================
+// STARTUP SEQUENCE
+// ============================================
+
+async function startServer() {
+  try {
+    console.log('\n╔════════════════════════════════════════════╗');
+    console.log('║   WiFi Hotspot Portal - Server Startup    ║');
+    console.log('╚════════════════════════════════════════════╝\n');
+
+    // Step 1: Initialize SSL Certificates
+    console.log('[1/6] Initializing SSL Certificates...');
+    const certManager = await initializeCertificates({
+      domain: process.env.HOTSPOT_DOMAIN || 'hotspot.local',
+      mode: process.env.SSL_MODE || 'self-signed',
+      environment: process.env.NODE_ENV || 'development',
+      validityDays: parseInt(process.env.SSL_VALIDITY_DAYS || 365),
+    });
+    console.log('✓ SSL Certificates initialized\n');
+
+    // Step 2: Initialize Database
+    console.log('[2/6] Connecting to Database...');
+    const pool = new Pool({
+      host: process.env.DB_HOST || 'postgres',
+      port: process.env.DB_PORT || 5432,
+      user: process.env.DB_USER || 'hotspot_user',
+      password: process.env.DB_PASSWORD || 'hotspot_secure_pass_2024',
+      database: process.env.DB_NAME || 'hotspot_portal',
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
+    });
+
+    // Test database connection
+    const client = await pool.connect();
+    await client.query('SELECT NOW()');
+    client.release();
+    console.log('✓ Database connected\n');
+
+    // Step 3: Initialize Redis Cache
+    console.log('[3/6] Initializing Redis Cache...');
+    const redisClient = redis.createClient({
+      url: process.env.REDIS_URL || 'redis://redis:6379',
+    });
+
+    redisClient.on('error', (err) => {
+      console.error('Redis error:', err);
+    });
+
+    await redisClient.connect();
+    console.log('✓ Redis cache initialized\n');
+
+    // Step 4: Initialize Plugin Manager
+    console.log('[4/6] Initializing Plugin Manager...');
+    const pluginManager = new PluginManager({
+      pluginDir: path.join(__dirname, '../plugins'),
+      logger: console,
+      db: pool,
+    });
+
+    // Load all plugins
+    const loadedPlugins = await pluginManager.loadAllPlugins();
+    console.log(`✓ Plugin Manager initialized (${loadedPlugins.length} plugins loaded)\n`);
+
+    // Step 5: Setup Routes
+    console.log('[5/6] Setting up Routes...');
+
+    // Health check
+    app.get('/health', (req, res) => {
+      res.json({
+        status: 'healthy',
+        timestamp: new Date(),
+        uptime: process.uptime(),
+        services: {
+          database: 'connected',
+          redis: 'connected',
+          certificates: 'valid',
+        },
+      });
+    });
+
+    // API Routes
+    app.use('/api/auth', require('./routes/auth'));
+    app.use('/api/users', require('./routes/users'));
+    app.use('/api/vouchers', require('./routes/vouchers'));
+    app.use('/api/bandwidth', require('./routes/bandwidth'));
+    app.use('/api/network', require('./routes/network'));
+    app.use('/api/notifications', require('./routes/notifications'));
+    app.use('/api/payments', require('./routes/payments'));
+    app.use('/api/certificates', require('./routes/certificate')(certManager));
+
+    // Plugin routes
+    console.log('  Loading plugin routes...');
+    pluginManager.routes.forEach((route) => {
+      console.log(`    → ${route.prefix}`);
+      app.use(route.prefix, route.router);
+    });
+
+    // Plugin management API
+    app.use('/api/plugins', require('./routes/plugins')(pluginManager));
+
+    // Plugin middleware
+    pluginManager.middleware.forEach((mw) => {
+      app.use(mw.fn);
+    });
+
+    // Error handling middleware
+    app.use((err, req, res, next) => {
+      console.error('Error:', err);
+      res.status(err.status || 500).json({
+        error: err.message,
+        status: err.status || 500,
+      });
+    });
+
+    console.log('✓ Routes configured\n');
+
+    // Step 6: Start HTTPS Server
+    console.log('[6/6] Starting HTTPS Server...');
+
+    const sslOptions = {
+      key: fs.readFileSync(path.join(__dirname, '../nginx/ssl/key.pem')),
+      cert: fs.readFileSync(path.join(__dirname, '../nginx/ssl/cert.pem')),
+    };
+
+    const httpsServer = https.createServer(sslOptions, app);
+    const httpServer = http.createServer((req, res) => {
+      res.writeHead(301, { Location: `https://${req.headers.host}${req.url}` });
+      res.end();
+    });
+
+    const HTTPS_PORT = parseInt(process.env.HTTPS_PORT || 3001);
+    const HTTP_PORT = parseInt(process.env.HTTP_PORT || 8000);
+
+    httpsServer.listen(HTTPS_PORT, () => {
+      console.log(`✓ HTTPS Server running on port ${HTTPS_PORT}\n`);
+    });
+
+    httpServer.listen(HTTP_PORT, () => {
+      console.log(`✓ HTTP Server running on port ${HTTP_PORT} (redirects to HTTPS)\n`);
+    });
+
+    // ============================================
+    // POST-STARTUP SETUP
+    // ============================================
+
+    // Attach managers to app for use in routes
+    app.locals.pool = pool;
+    app.locals.redis = redisClient;
+    app.locals.pluginManager = pluginManager;
+    app.locals.certManager = certManager;
+
+    // Start certificate auto-renewal
+    console.log('Starting certificate auto-renewal...');
+    certManager.startAutoRenewalCron();
+
+    // Execute plugin hooks
+    console.log('Executing plugin initialization hooks...');
+    await pluginManager.executeHook('app:started', { app, pool, redisClient });
+
+    console.log('\n╔════════════════════════════════════════════╗');
+    console.log('║          ✓ Server Ready!                   ║');
+    console.log('╚════════════════════════════════════════════╝\n');
+
+    console.log('📊 Server Information:');
+    console.log(`   Environment: ${process.env.NODE_ENV}`);
+    console.log(`   HTTPS Port: ${HTTPS_PORT}`);
+    console.log(`   HTTP Port: ${HTTP_PORT}`);
+    console.log(`   Database: ${process.env.DB_HOST}:${process.env.DB_PORT}`);
+    console.log(`   Plugins Loaded: ${loadedPlugins.length}`);
+    console.log(`   SSL Mode: ${process.env.SSL_MODE || 'self-signed'}`);
+    console.log('\n🔗 Access URLs:');
+    console.log(`   Admin: https://localhost:3000`);
+    console.log(`   Portal: https://localhost:8080`);
+    console.log(`   API: https://localhost:3001`);
+    console.log('\n📦 Available Plugin Management Endpoints:');
+    console.log('   GET  /api/plugins              - List all plugins');
+    console.log('   GET  /api/plugins/:name        - Get plugin info');
+    console.log('   POST /api/plugins/install      - Install plugin');
+    console.log('   POST /api/plugins/:name/enable - Enable plugin');
+    console.log('   POST /api/plugins/:name/disable - Disable plugin');
+    console.log('\n🔐 Certificate Management Endpoints:');
+    console.log('   GET  /api/certificates/status   - Certificate status');
+    console.log('   GET  /api/certificates/info     - Certificate details');
+    console.log('   POST /api/certificates/renew    - Manual renewal');
+    console.log('\n');
+
+    // Handle graceful shutdown
+    process.on('SIGTERM', async () => {
+      console.log('\n🛑 SIGTERM signal received: closing HTTP server');
+      httpsServer.close(() => {
+        console.log('HTTPS server closed');
+      });
+      httpServer.close(() => {
+        console.log('HTTP server closed');
+      });
+
+      // Cleanup plugins
+      for (const [name] of pluginManager.plugins) {
+        await pluginManager.unloadPlugin(name);
+      }
+
+      await pool.end();
+      await redisClient.quit();
+      process.exit(0);
+    });
+
+    process.on('SIGINT', async () => {
+      console.log('\n🛑 SIGINT signal received: closing HTTP server');
+      httpsServer.close(() => {
+        console.log('HTTPS server closed');
+      });
+      httpServer.close(() => {
+        console.log('HTTP server closed');
+      });
+
+      // Cleanup plugins
+      for (const [name] of pluginManager.plugins) {
+        await pluginManager.unloadPlugin(name);
+      }
+
+      await pool.end();
+      await redisClient.quit();
+      process.exit(0);
+    });
+  } catch (error) {
+    console.error('\n❌ Fatal Error during startup:', error);
+    console.error(error.stack);
+    process.exit(1);
+  }
+}
+
+// Start the server
+startServer().catch((error) => {
+  console.error('Fatal error:', error);
+  process.exit(1);
+});
+
+module.exports = app;
