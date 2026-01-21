@@ -1,0 +1,19 @@
+// plugins/sms-gateway/plugin.json
+{
+  "name": "sms-gateway",
+  "version": "1.0.0",
+  "type": "module",
+  "author": "Integration Team",
+  "license": "MIT",
+  "description": "SMS gateway integration (supports multiple providers)",
+  "main": "index.js",
+  "dependencies": {},
+  "hooks": [
+    "notification:send"
+  ],
+  "config": {
+    "provider": "twilio",
+    "apiKey": "",
+    "apiSecret": ""
+  }
+}
