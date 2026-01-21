@@ -1,0 +1,28 @@
+// plugins/advanced-analytics/plugin.json
+{
+  "name": "advanced-analytics",
+  "version": "1.0.0",
+  "type": "module",
+  "author": "Hotspot Team",
+  "license": "MIT",
+  "description": "Advanced analytics and reporting for hotspot users",
+  "homepage": "https://github.com/hotspot/advanced-analytics",
+  "main": "index.js",
+  "dependencies": {},
+  "hooks": [
+    "user:login",
+    "user:logout",
+    "bandwidth:usage",
+    "payment:completed"
+  ],
+  "routes": [
+    "/api/analytics/dashboard",
+    "/api/analytics/reports",
+    "/api/analytics/export"
+  ],
+  "config": {
+    "enableTracking": true,
+    "retentionDays": 365,
+    "reportFormat": "json"
+  }
+}
