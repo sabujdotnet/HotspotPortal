@@ -1,0 +1,20 @@
+// plugins/2fa-authentication/plugin.json
+{
+  "name": "2fa-authentication",
+  "version": "1.0.0",
+  "type": "module",
+  "author": "Security Team",
+  "license": "MIT",
+  "description": "Two-factor authentication for user accounts",
+  "main": "index.js",
+  "dependencies": {},
+  "hooks": [
+    "auth:login",
+    "auth:register"
+  ],
+  "config": {
+    "enableTOTP": true,
+    "enableSMS": true,
+    "enableEmail": true
+  }
+}
