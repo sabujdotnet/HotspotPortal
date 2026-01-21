@@ -1,5 +1,6 @@
 # HotspotPortal
 structure 
+```
 hotspot-portal/
 ├── docker-compose.yml          # Main orchestration
 ├── db/
@@ -31,3 +32,4 @@ hotspot-portal/
 │       ├── cert.pem
 │       └── key.pem
 └── README.md
+```
