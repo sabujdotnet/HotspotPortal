@@ -1,165 +1,19 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: hotspot-db
-    environment:
-      POSTGRES_USER: hotspot_user
-      POSTGRES_PASSWORD: hotspot_secure_pass_2024
-      POSTGRES_DB: hotspot_portal
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hotspot_user"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - hotspot-network
-
-  # Redis Cache
-  redis:
-    image: redis:7-alpine
-    container_name: hotspot-cache
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - hotspot-network
-
-  # Backend API (Node.js)
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: hotspot-api
-    environment:
-      NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: hotspot_user
-      DB_PASSWORD: hotspot_secure_pass_2024
-      DB_NAME: hotspot_portal
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: your_jwt_secret_key_change_this
-      MIKROTIK_HOST: ${MIKROTIK_HOST}
-      MIKROTIK_USER: ${MIKROTIK_USER}
-      MIKROTIK_PASS: ${MIKROTIK_PASS}
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASS: ${SMTP_PASS}
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
-      TWILIO_PHONE: ${TWILIO_PHONE}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    ports:
-      - "3001:3001"
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
-    networks:
-      - hotspot-network
-
-  # Frontend Dashboard (React)
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: hotspot-dashboard
-    environment:
-      REACT_APP_API_URL: http://localhost:3001
-      REACT_APP_SOCKET_URL: http://localhost:3001
-    depends_on:
-      - backend
+    build: ./backend
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    networks:
-      - hotspot-network
+    restart: unless-stopped
 
-  # User Portal (Captive Portal)
+  radius:
+    image: freeradius/freeradius-server
+    ports:
+      - "1812:1812/udp"
+      - "1813:1813/udp"
+
   portal:
-    build:
-      context: ./portal
-      dockerfile: Dockerfile
-    container_name: hotspot-user-portal
-    environment:
-      REACT_APP_API_URL: http://localhost:3001
-      REACT_APP_PORTAL_URL: http://localhost:8080
-    depends_on:
-      - backend
-    ports:
-      - "8080:3000"
-    volumes:
-      - ./portal:/app
-      - /app/node_modules
-    networks:
-      - hotspot-network
-
-  # Payment Gateway (Stripe integration)
-  payment-service:
-    build:
-      context: ./payment
-      dockerfile: Dockerfile
-    container_name: hotspot-payment
-    environment:
-      NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: hotspot_user
-      DB_PASSWORD: hotspot_secure_pass_2024
-      DB_NAME: hotspot_portal
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
-      STRIPE_PUBLIC_KEY: ${STRIPE_PUBLIC_KEY}
-      API_URL: http://backend:3001
-    depends_on:
-      - postgres
-      - backend
-    ports:
-      - "3002:3001"
-    volumes:
-      - ./payment:/app
-      - /app/node_modules
-    networks:
-      - hotspot-network
-
-  # Nginx Reverse Proxy & Captive Portal
-  nginx:
     image: nginx:alpine
-    container_name: hotspot-proxy
     ports:
       - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./nginx/captive.conf:/etc/nginx/conf.d/captive.conf
-      - ./nginx/ssl:/etc/nginx/ssl
-    depends_on:
-      - backend
-      - frontend
-      - portal
-    networks:
-      - hotspot-network
-
-volumes:
-  postgres_data:
-
-networks:
-  hotspot-network:
-    driver: bridge
