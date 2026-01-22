@@ -1,4 +1,34 @@
 // frontend/src/App.jsx
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import AdminDashboard from './pages/AdminDashboard';
+import LoginPage from './pages/LoginPage';
+import NotFoundPage from './pages/NotFoundPage';
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        {/* Auth Routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        
+        {/* Main Routes */}
+        <Route path="/" element={<AdminDashboard />} />
+        <Route path="/dashboard" element={<AdminDashboard />} />
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/vouchers" element={<VouchersPage />} />
+        <Route path="/bandwidth" element={<BandwidthPage />} />
+        <Route path="/payments" element={<PaymentsPage />} />
+        <Route path="/devices" element={<DevicesPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
+        
+        {/* Catch all - 404 */}
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </Router>
+  );
+// frontend/src/App.jsx
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
