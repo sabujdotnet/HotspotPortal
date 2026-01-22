@@ -7,24 +7,20 @@ on:
     branches: [ "main" ]
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
-# In your GitHub Actions workflow file
-- name: Build backend service
-  run: docker build -t backend -f backend/Dockerfile backend
 
-- name: Build frontend service  
-  run: docker build -t frontend -f frontend/Dockerfile frontend
+    - name: Build backend service
+      run: docker build -t backend:$(date +%s) -f backend/Dockerfile backend
 
-- name: Build portal service
-  run: docker build -t portal -f portal/Dockerfile portal
+    - name: Build frontend service
+      run: docker build -t frontend:$(date +%s) -f frontend/Dockerfile frontend
 
-- name: Build payment service
-  run: docker build -t payment -f payment/Dockerfile payment
+    - name: Build portal service
+      run: docker build -t portal:$(date +%s) -f portal/Dockerfile portal
+
+    - name: Build payment service
+      run: docker build -t payment:$(date +%s) -f payment/Dockerfile payment
