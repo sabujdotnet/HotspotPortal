@@ -1,0 +1,80 @@
+//locales/en.json - Example English translations
+{
+  "common": {
+    "welcome": "Welcome to WiFi Hotspot",
+    "login": "Login",
+    "logout": "Logout",
+    "register": "Register",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "back": "Back",
+    "next": "Next",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "overview": "Overview",
+    "users": "Users",
+    "bandwidth": "Bandwidth",
+    "payments": "Payments",
+    "analytics": "Analytics"
+  },
+  "users": {
+    "total": "Total Users",
+    "active": "Active Users",
+    "inactive": "Inactive Users",
+    "newToday": "New Today",
+    "list": "User List",
+    "create": "Create User",
+    "edit": "Edit User",
+    "delete": "Delete User",
+    "username": "Username",
+    "status": "Status",
+    "expiryDate": "Expiry Date"
+  },
+  "vouchers": {
+    "title": "Vouchers",
+    "create": "Create Voucher",
+    "code": "Code",
+    "validity": "Validity (Days)",
+    "bandwidth": "Bandwidth (GB)",
+    "price": "Price",
+    "status": "Status",
+    "redeem": "Redeem Voucher",
+    "redeemed": "Redeemed"
+  },
+  "bandwidth": {
+    "limit": "Bandwidth Limit",
+    "usage": "Usage",
+    "total": "Total Bandwidth",
+    "download": "Download",
+    "upload": "Upload",
+    "remaining": "Remaining",
+    "exceeded": "Limit Exceeded"
+  },
+  "payments": {
+    "title": "Payments",
+    "amount": "Amount",
+    "currency": "Currency",
+    "method": "Payment Method",
+    "status": "Status",
+    "completed": "Completed",
+    "failed": "Failed",
+    "pending": "Pending",
+    "refund": "Refund"
+  },
+  "messages": {
+    "welcome": "Welcome {{name}}!",
+    "goodbye": "See you soon!",
+    "userCreated": "User {{username}} created successfully",
+    "userDeleted": "User {{username}} deleted",
+    "voucherRedeemed": "Voucher redeemed successfully",
+    "paymentSuccess": "Payment completed successfully",
+    "paymentFailed": "Payment failed. Please try again.",
+    "error": "An error occurred. Please try again."
+  }
+}
