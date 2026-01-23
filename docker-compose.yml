@@ -1,19 +1,179 @@
-version: "3.9"
+version: '3.9'
 
 services:
-  backend:
-    build: ./backend
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: hotspot_db
+    environment:
+      POSTGRES_USER: hotspot_admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-123456789}
+      POSTGRES_DB: hotspot_portal
+      TZ: UTC
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hotspot_admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hotspot_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: hotspot_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hotspot_network
+
+  # Backend API (Node.js/Express)
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hotspot_api
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: hotspot_admin
+      DB_PASSWORD: ${DB_PASSWORD:-change_me_in_production}
+      DB_NAME: hotspot_portal
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_change_in_production}
+      MIKROTIK_HOST: ${MIKROTIK_HOST:-10.10.10.1}
+      MIKROTIK_USER: ${MIKROTIK_USER:-admin}
+      MIKROTIK_PASSWORD: ${MIKROTIK_PASSWORD:-change_me}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-your_email@gmail.com}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-your_app_password}
+      SMS_PROVIDER: ${SMS_PROVIDER:-twilio}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE: ${TWILIO_PHONE}
+      API_PORT: 3000
     ports:
       - "3000:3000"
-    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - hotspot_network
 
-  radius:
-    image: freeradius/freeradius-server
+  # Frontend (React)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: hotspot_frontend
+    environment:
+      REACT_APP_API_URL: http://api:3000
+      REACT_APP_WS_URL: ws://api:3000
     ports:
-      - "1812:1812/udp"
-      - "1813:1813/udp"
+      - "3001:3000"
+    depends_on:
+      - api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - hotspot_network
 
-  portal:
-    image: nginx:alpine
+  # Captive Portal (Lightweight Portal Server)
+  captive_portal:
+    build:
+      context: ./captive-portal
+      dockerfile: Dockerfile
+    container_name: hotspot_captive
+    environment:
+      API_URL: http://api:3000
+      PORTAL_PORT: 8080
+      REDIRECT_HOST: ${PORTAL_HOST:-192.168.1.100}
     ports:
-      - "80:80"
+      - "8080:8080"
+      - "80:8080"
+    depends_on:
+      - api
+    volumes:
+      - ./captive-portal:/app
+      - /app/node_modules
+    networks:
+      - hotspot_network
+
+  # MikroTik API Service
+  mikrotik_service:
+    build:
+      context: ./services/mikrotik
+      dockerfile: Dockerfile
+    container_name: hotspot_mikrotik
+    environment:
+      MIKROTIK_HOST: ${MIKROTIK_HOST:-192.168.1.1}
+      MIKROTIK_USER: ${MIKROTIK_USER:-admin}
+      MIKROTIK_PASSWORD: ${MIKROTIK_PASSWORD:-change_me}
+      API_URL: http://api:3000
+      SERVICE_PORT: 3002
+    ports:
+      - "3002:3002"
+    depends_on:
+      - api
+    volumes:
+      - ./services/mikrotik:/app
+      - /app/node_modules
+    networks:
+      - hotspot_network
+
+  # Notification Service (Email/SMS)
+  notification_service:
+    build:
+      context: ./services/notifications
+      dockerfile: Dockerfile
+    container_name: hotspot_notifications
+    environment:
+      REDIS_URL: redis://redis:6379
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: hotspot_admin
+      DB_PASSWORD: ${DB_PASSWORD:-123456789}
+      DB_NAME: hotspot_portal
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-sabuj.kcl@gmail.com}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-your_app_password}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE: ${TWILIO_PHONE}
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - ./services/notifications:/app
+      - /app/node_modules
+    networks:
+      - hotspot_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  hotspot_network:
+    driver: bridge
