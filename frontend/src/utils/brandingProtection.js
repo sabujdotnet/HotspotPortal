@@ -11,7 +11,7 @@
  * - Crypto signature verification
  * - Automatic watermark restoration
  * 
- * Author: Your Name
+ * Author: Sabujdotnet
  * License: Proprietary
  */
 
