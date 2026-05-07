@@ -66,8 +66,8 @@
     Cache-Control = "public, max-age=31536000, immutable"
 
 # API redirects (if backend on different domain)
-#[[redirects]]
-  #from = "/api/*"
-  #to = "https://0.0.0.0/api/:splat"
-  #status = 200
-  #force = false
+[[redirects]]
+  from = "/api/*"
+  to = "https://0.0.0.0/api/:splat"
+  status = 200
+  force = false
