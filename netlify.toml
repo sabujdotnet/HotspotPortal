@@ -68,6 +68,6 @@
 # API redirects (if backend on different domain)
 #[[redirects]]
   #from = "/api/*"
-  #to = "https://api.yourserver.com/api/:splat"
+  #to = "https://0.0.0.0/api/:splat"
   #status = 200
   #force = false
